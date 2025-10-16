@@ -1,55 +1,108 @@
-// server.js (ฉบับอัปเกรด)
+// script.js (เวอร์ชันสุดท้ายที่เชื่อมต่อกับ Backend จริง)
 
-// 1. เรียกใช้เครื่องมือทั้งหมดที่เราต้องการ
-const express = require('express');
-const axios = require('axios'); // 'รถส่งของ' ของเรา
-const cors = require('cors');   // 'ใบอนุญาตผ่านด่าน'
+document.addEventListener('DOMContentLoaded', () => {
 
-// 2. สร้างตัวแอปพลิเคชัน
-const app = express();
-const PORT = process.env.PORT || 3000;
+    // ส่วนที่ 1: จัดการเมนู Dropdown (ยังเหมือนเดิม)
+    const dropdownToggle = document.querySelector('.dropdown-toggle');
+    const dropdownMenu = document.querySelector('.dropdown-menu');
+    if (dropdownToggle && dropdownMenu) {
+        dropdownToggle.addEventListener('click', (event) => {
+            event.preventDefault();
+            dropdownMenu.classList.toggle('show');
+        });
+        window.addEventListener('click', (event) => {
+            if (!dropdownToggle.contains(event.target) && !dropdownMenu.contains(event.target)) {
+                dropdownMenu.classList.remove('show');
+            }
+        });
+    }
 
-// 3. ตั้งค่าความปลอดภัย
-app.use(cors()); // อนุญาตให้หน้าบ้านคุยกับเราได้
-app.use(express.json()); // ทำให้เซิร์ฟเวอร์อ่านข้อมูล JSON ได้
+    // ==========================================================
+    //   ส่วนที่ 2: ดึงข้อมูลจากเซิร์ฟเวอร์ Render ของคุณ
+    // ==========================================================
+    
+    // ที่อยู่ของ "พ่อครัว" ที่ทำงานอยู่บน Render
+    const backendUrl = 'https://my-topup-api.onrender.com/api/games';
 
-app.get('/', (req, res) => {
-  res.send('Backend Server is running and healthy!');
-});
+    const allGamesGrid = document.querySelector('#all-games .game-grid');
 
-// ==========================================================
-//   หัวใจหลัก: ที่เก็บกุญแจลับ และสูตรอาหาร
-// ==========================================================
+    async function fetchGamesFromBackend() {
+        console.log("กำลังร้องขอข้อมูลเกมจากเซิร์ฟเวอร์ Render...");
+        try {
+            // ส่งคำขอแบบ POST ไปหา "พ่อครัว" ของเรา
+            const response = await fetch(backendUrl, {
+                method: 'POST', // ใช้วิธี POST
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
 
-// 🔑 เก็บ API Key ของคุณไว้อย่างปลอดภัยที่นี่
-const BARBAR_API_KEY = "BGZGP1760538243999"; // <--- ❗️❗️ ใส่ API KEY จริงๆ ของคุณตรงนี้ ❗️❗️
+            if (!response.ok) {
+                throw new Error('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์หลังบ้านได้');
+            }
 
-// สร้างเส้นทางใหม่สำหรับให้ "หน้าบ้าน" มาขอรายชื่อเกม
-app.post('/api/games', async (req, res) => {
-  console.log("ได้รับการร้องขอรายชื่อเกม...");
+            const result = await response.json();
+            
+            // ตรวจสอบว่า API จาก Barbartopup ตอบกลับมาสำเร็จหรือไม่
+            if (result.status && result.data) {
+                console.log("ได้รับข้อมูลเกมเรียบร้อย!");
+                const activeGames = result.data.filter(game => game.status === 'aktif');
+                displayGames(activeGames);
+            } else {
+                // ถ้า Barbartopup ตอบกลับมาว่ามีปัญหา (เช่น IP ยังไม่ถูก Whitelist)
+                console.error("API ตอบกลับมาว่ามีปัญหา:", result.msg);
+                allGamesGrid.innerHTML = `<p>เกิดข้อผิดพลาดจาก API: ${result.msg}</p>`;
+            }
 
-  try {
-    // พ่อครัวกำลังเตรียมส่ง "ซองจดหมายปิดผนึก" (POST request)
-    const response = await axios.post(
-      'https://api.barbartopup.com/service', // ที่อยู่โกดัง
-      {
-        api_key: BARBAR_API_KEY // แนบบัตรสมาชิกลับไปด้วย
-      }
-    );
+        } catch (error) {
+            console.error("เกิดข้อผิดพลาดในการดึงข้อมูล:", error);
+            allGamesGrid.innerHTML = "<p>ไม่สามารถโหลดข้อมูลเกมได้ในขณะนี้ กรุณาตรวจสอบว่าเซิร์ฟเวอร์ Backend ทำงานอยู่</p>";
+        }
+    }
 
-    // เมื่อได้เมนูจากโกดังแล้ว ให้ส่งกลับไปให้หน้าบ้าน
-    console.log("ดึงข้อมูลสำเร็จ! กำลังส่งกลับไปให้หน้าบ้าน...");
-    res.json(response.data);
+    function displayGames(games) {
+        if (!allGamesGrid) return;
+        allGamesGrid.innerHTML = '';
 
-  } catch (error) {
-    console.error("เกิดข้อผิดพลาด:", error.message);
-    res.status(500).json({ status: false, msg: "มีปัญหาในการเชื่อมต่อกับเซิร์ฟเวอร์ Barbartopup" });
-  }
-});
+        const popularGrid = document.querySelector('#popular-games .game-grid');
+        if (popularGrid) popularGrid.innerHTML = '';
 
-// ==========================================================
+        // *** ส่วนนี้สำคัญ เราต้องหาทางเชื่อมข้อมูล API กับรูปภาพของเรา ***
+        const gameImageMapping = {
+            "Mobile Legends": "images/mlbb.jpg", // สมมติว่ามีรูปนี้
+            "Valorant": "images/game1.jpg",
+            "Default": "https://via.placeholder.com/150/CCCCCC/FFFFFF?text=Game" // รูปสำรอง
+        };
 
-// 4. สั่งให้ร้านเปิดและรอรับลูกค้า
-app.listen(PORT, () => {
-  console.log(`เซิร์ฟเวอร์กำลังทำงานที่ http://localhost:${PORT}`);
+        games.forEach(game => {
+            // หากรูปภาพจาก Mapping ตาม 'kategori'
+            const imageUrl = gameImageMapping[game.kategori] || gameImageMapping['Default'];
+
+            const gameCardHTML = `
+                <a href="product.html?kategori=${encodeURIComponent(game.kategori)}" class="game-card-link">
+                    <div class="game-card">
+                        <img src="${imageUrl}" alt="${game.kategori}">
+                        <h3>${game.kategori}</h3>
+                    </div>
+                </a>
+            `;
+            allGamesGrid.innerHTML += gameCardHTML;
+        });
+
+        // ทำให้เกมไม่ซ้ำกัน (แสดงแค่ 1 การ์ดต่อ 1 หมวดหมู่)
+        const uniqueCategories = {};
+        allGamesGrid.querySelectorAll('.game-card-link').forEach(link => {
+            const category = link.querySelector('h3').textContent;
+            if (uniqueCategories[category]) {
+                link.remove();
+            } else {
+                uniqueCategories[category] = true;
+            }
+        });
+    }
+
+    // สั่งให้เริ่มทำงาน
+    if (allGamesGrid) {
+        fetchGamesFromBackend();
+    }
 });
